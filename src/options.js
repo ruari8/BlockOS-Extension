@@ -120,9 +120,17 @@ async function resetTodayUsage() {
   const state = await getState();
   const dateKey = getLocalDateKey();
   const nextUsageByDate = { ...state.usageByDate };
+  const nextWarningNoticesByDate = { ...state.warningNoticesByDate };
+  const nextGraceUrlsByDate = { ...state.graceUrlsByDate };
   delete nextUsageByDate[dateKey];
-  await setState({ usageByDate: nextUsageByDate });
-  await notifyBackground();
+  delete nextWarningNoticesByDate[dateKey];
+  delete nextGraceUrlsByDate[dateKey];
+  await setState({
+    usageByDate: nextUsageByDate,
+    warningNoticesByDate: nextWarningNoticesByDate,
+    graceUrlsByDate: nextGraceUrlsByDate
+  });
+  await notifyBackground("today-reset");
   await render();
 }
 
@@ -159,9 +167,9 @@ function emptyState(message) {
   return element;
 }
 
-async function notifyBackground() {
+async function notifyBackground(type = "rules-updated") {
   try {
-    await chrome.runtime.sendMessage({ type: "rules-updated" });
+    await chrome.runtime.sendMessage({ type });
   } catch (_error) {
     // The options page still works if the background worker is asleep.
   }

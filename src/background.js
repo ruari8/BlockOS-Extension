@@ -73,6 +73,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "today-reset") {
+    handleTodayReset().then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   return false;
 });
 
@@ -139,6 +144,12 @@ async function handleDailyReset() {
   await scheduleResetAlarm();
   await refreshActiveContext();
   await enforceActiveTab();
+}
+
+async function handleTodayReset() {
+  lastTickAt = Date.now();
+  await refreshActiveContext();
+  await restoreBlockedTabs();
 }
 
 function maybeMarkWarningNotice(state, rule, previousSeconds, nextSeconds, dateKey) {
@@ -329,5 +340,24 @@ async function enforceTab(tabId) {
   if (tab.url !== blockedUrl) {
     await chrome.tabs.update(tabId, { url: blockedUrl });
   }
+}
+
+async function restoreBlockedTabs() {
+  const tabs = await chrome.tabs.query({});
+  const blockedPrefix = chrome.runtime.getURL("src/blocked.html");
+
+  await Promise.all(tabs.map(async (tab) => {
+    if (!tab.id || !tab.url?.startsWith(blockedPrefix)) {
+      return;
+    }
+
+    const originalUrl = new URL(tab.url).searchParams.get("url");
+
+    if (!originalUrl || !/^https?:\/\//i.test(originalUrl)) {
+      return;
+    }
+
+    await chrome.tabs.update(tab.id, { url: originalUrl });
+  }));
 }
 })();
