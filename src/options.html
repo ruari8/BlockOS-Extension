@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Site Budget Blocker</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Personal blocker</p>
+          <h1>Daily site budgets</h1>
+        </div>
+        <p id="today" class="muted"></p>
+      </header>
+      <p id="statusMessage" class="status" hidden></p>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <h2>Active today</h2>
+            <p class="muted">Changes you make here apply tomorrow.</p>
+          </div>
+          <button id="resetUsageButton" type="button" class="secondary">Reset today for testing</button>
+        </div>
+        <div id="activeRules" class="rule-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <h2>Tomorrow's rules</h2>
+            <p class="muted">Edit this draft. It becomes active at the next local day.</p>
+          </div>
+          <button id="discardButton" type="button" class="secondary">Discard pending changes</button>
+        </div>
+        <form id="rulesForm" class="rule-editor"></form>
+        <div class="actions">
+          <button id="addRuleButton" type="button" class="secondary">Add rule</button>
+          <button type="submit" form="rulesForm">Save for tomorrow</button>
+        </div>
+      </section>
+    </main>
+
+    <template id="activeRuleTemplate">
+      <article class="rule-card">
+        <div>
+          <h3 data-field="pattern"></h3>
+          <p class="muted" data-field="status"></p>
+        </div>
+        <div class="usage">
+          <strong data-field="used"></strong>
+          <span data-field="limit"></span>
+        </div>
+      </article>
+    </template>
+
+    <template id="editableRuleTemplate">
+      <fieldset class="editor-row">
+        <label>
+          <span>Pattern</span>
+          <input name="pattern" type="text" placeholder="*://*.chess.com/*" required>
+        </label>
+        <label>
+          <span>Minutes</span>
+          <input name="minutes" type="number" min="1" max="1440" step="1" required>
+        </label>
+        <label class="toggle">
+          <input name="enabled" type="checkbox">
+          <span>Enabled</span>
+        </label>
+        <button type="button" class="danger" data-action="remove">Remove</button>
+      </fieldset>
+    </template>
+
+    <script src="shared.js" defer></script>
+    <script src="options.js" defer></script>
+  </body>
+</html>

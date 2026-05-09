@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Blocked</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="blocked-body">
+    <main class="blocked-shell">
+      <p class="eyebrow">Daily budget used</p>
+      <h1 id="title">This site is blocked for today.</h1>
+      <dl class="blocked-details">
+        <div>
+          <dt>Rule</dt>
+          <dd id="rulePattern">-</dd>
+        </div>
+        <div>
+          <dt>Used</dt>
+          <dd id="used">-</dd>
+        </div>
+        <div>
+          <dt>Resets</dt>
+          <dd id="reset">-</dd>
+        </div>
+      </dl>
+      <a class="secondary link-button" href="options.html">View rules</a>
+    </main>
+
+    <script src="shared.js"></script>
+    <script src="blocked.js"></script>
+  </body>
+</html>

@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Personal Site Budget Blocker",
+  "description": "A local-only site blocker with daily time budgets and delayed rule changes.",
+  "version": "0.1.0",
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms",
+    "notifications",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "options_page": "src/options.html",
+  "action": {
+    "default_title": "Site Budget Blocker",
+    "default_popup": "src/options.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/blocked.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}
