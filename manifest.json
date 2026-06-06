@@ -3,6 +3,9 @@
   "name": "Personal Site Budget Blocker",
   "description": "A local-only site blocker with daily time budgets and delayed rule changes.",
   "version": "0.1.0",
+  "icons": {
+    "128": "icons/icon-128.png"
+  },
   "permissions": [
     "storage",
     "tabs",
@@ -19,7 +22,10 @@
   "options_page": "src/options.html",
   "action": {
     "default_title": "Site Budget Blocker",
-    "default_popup": "src/options.html"
+    "default_popup": "src/options.html",
+    "default_icon": {
+      "128": "icons/icon-128.png"
+    }
   },
   "web_accessible_resources": [
     {

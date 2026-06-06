@@ -1,0 +1,10 @@
+{
+  "name": "blockos-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-only browser extension for daily site time budgets.",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/smoke-check.mjs"
+  }
+}

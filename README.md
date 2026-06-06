@@ -1,24 +1,56 @@
-# Personal Site Budget Blocker
+# BlockOS Extension
 
-A local-only Chromium extension for Chrome and Helium that tracks daily active-tab time budgets and blocks matching sites after the limit is used.
+A small Manifest V3 browser extension for local-only site budgets. It tracks time spent in matching active tabs and blocks the site for the rest of the local day after the budget is used.
 
-## Load Unpacked
+I originally built this as a practical answer to my Chess.com habit: enough friction to stop a casual "one more game" spiral, without pretending to be OS-level parental-control software. It is now part of my everyday browser setup and acts as a lightweight companion to BlockOS.
 
-1. Open `chrome://extensions` in Chrome or Helium.
+## What it does
+
+- Tracks active-tab time against configurable URL patterns.
+- Ships with a default Chess.com rule: `*://*.chess.com/*` for 30 minutes per local day.
+- Blocks matching tabs once the daily budget is used.
+- Applies rule edits the next day, so limits cannot be changed in the moment.
+- Sends a warning notification with 10 minutes left.
+- Allows the current Chess.com game URL to finish when the budget runs out, then blocks new Chess.com pages.
+- Stores all rules and usage locally with `chrome.storage.local`.
+
+## Install locally
+
+1. Open `chrome://extensions` in Chrome, Chromium, or Helium.
 2. Enable developer mode.
 3. Choose **Load unpacked**.
 4. Select this project folder.
 
-## Default Rule
+No build step is required.
 
-The first install creates one active rule:
+## Using it
 
-- Pattern: `*://*.chess.com/*`
-- Budget: 30 minutes per local day
-- Enforcement: blocked until the next local day after the budget is used
+Open the extension popup or options page to view today's active rules and edit tomorrow's draft rules. A rule has:
 
-## Notes
+- `pattern`: a URL pattern such as `*://*.chess.com/*`
+- `minutes`: the daily active-tab budget
+- `enabled`: whether the rule is active
 
-- Rule edits are saved as pending changes and apply the next day.
-- The options page includes a **Reset today for testing** button so you can test short budgets without waiting for midnight.
-- This is extension-level friction, not OS-level enforcement. Disabling the extension, removing it, or using a browser/profile without it will bypass the blocker.
+Saved changes become active at the next local day. The options page also includes **Reset today for testing**, which clears today's usage and restores blocked tabs so short budgets can be tested without waiting until midnight.
+
+## Development
+
+This is plain HTML, CSS, and JavaScript:
+
+- `manifest.json` defines the Manifest V3 extension.
+- `src/background.js` tracks usage, schedules resets, and enforces blocks.
+- `src/shared.js` contains date, rule, matching, and storage helpers.
+- `src/options.html` and `src/options.js` provide the rule editor.
+- `src/blocked.html` and `src/blocked.js` render the blocked page.
+
+Run the smoke check:
+
+```sh
+npm run check
+```
+
+The check validates the manifest's referenced files and syntax-checks the extension JavaScript.
+
+## Limits
+
+This is intentionally browser-level friction. Disabling the extension, removing it, switching profiles, or using another browser will bypass it. That tradeoff is acceptable for the use case: making the default path less impulsive without adding heavyweight monitoring or external services.
