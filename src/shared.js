@@ -1,4 +1,5 @@
 (() => {
+// Rules are fixed in code on purpose: there is no UI to loosen them.
 const DEFAULT_RULES = [
   {
     id: "chess-com",
@@ -9,12 +10,13 @@ const DEFAULT_RULES = [
 ];
 
 const STORAGE_DEFAULTS = {
-  activeRules: DEFAULT_RULES,
-  pendingRules: null,
-  pendingRulesCreatedDate: null,
   usageByDate: {},
   warningNoticesByDate: {},
-  graceUrlsByDate: {}
+  graceUrlsByDate: {},
+  chaseByDate: {},
+  chessUsername: "",
+  pendingChessUsername: null,
+  pendingChessUsernameDate: null
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -115,15 +117,14 @@ function formatDuration(seconds) {
 
 async function getState() {
   const state = await chrome.storage.local.get(STORAGE_DEFAULTS);
-  const activeRules = ensureRuleIds(state.activeRules?.length ? state.activeRules : DEFAULT_RULES);
   return {
     ...STORAGE_DEFAULTS,
     ...state,
-    activeRules,
-    pendingRules: state.pendingRules ? ensureRuleIds(state.pendingRules) : null,
+    activeRules: cloneRules(DEFAULT_RULES),
     usageByDate: state.usageByDate || {},
     warningNoticesByDate: state.warningNoticesByDate || {},
-    graceUrlsByDate: state.graceUrlsByDate || {}
+    graceUrlsByDate: state.graceUrlsByDate || {},
+    chaseByDate: state.chaseByDate || {}
   };
 }
 
@@ -132,12 +133,8 @@ async function setState(partialState) {
 }
 
 async function initializeState() {
-  const stored = await chrome.storage.local.get(["activeRules", "usageByDate", "warningNoticesByDate", "graceUrlsByDate"]);
+  const stored = await chrome.storage.local.get(["usageByDate", "warningNoticesByDate", "graceUrlsByDate"]);
   const patch = {};
-
-  if (!stored.activeRules) {
-    patch.activeRules = DEFAULT_RULES;
-  }
 
   if (!stored.usageByDate) {
     patch.usageByDate = {};
@@ -159,25 +156,20 @@ async function initializeState() {
 async function applyPendingRulesIfReady(date = new Date()) {
   const state = await getState();
   const today = getLocalDateKey(date);
+  const patch = {};
 
-  if (!state.pendingRules || state.pendingRulesCreatedDate === today) {
+  if (state.pendingChessUsername !== null && state.pendingChessUsernameDate !== today) {
+    patch.chessUsername = state.pendingChessUsername;
+    patch.pendingChessUsername = null;
+    patch.pendingChessUsernameDate = null;
+  }
+
+  if (Object.keys(patch).length === 0) {
     return state;
   }
 
-  const nextState = {
-    ...state,
-    activeRules: ensureRuleIds(state.pendingRules),
-    pendingRules: null,
-    pendingRulesCreatedDate: null
-  };
-
-  await setState({
-    activeRules: nextState.activeRules,
-    pendingRules: null,
-    pendingRulesCreatedDate: null
-  });
-
-  return nextState;
+  await setState(patch);
+  return { ...state, ...patch };
 }
 
 if (typeof self !== "undefined") {

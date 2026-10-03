@@ -15,6 +15,10 @@ const {
 
 const TICK_SECONDS = 30;
 const WARNING_THRESHOLD_SECONDS = 10 * 60;
+const CHASE_FIND_GAME_MS = 10 * 60 * 1000;
+const CHASE_MAX_MS = 60 * 60 * 1000;
+const CHASE_START_URL = "https://www.chess.com/play/online";
+const LOSS_RESULTS = new Set(["checkmated", "resigned", "timeout", "abandoned", "lose", "bughousepartnerlose", "kingofthehill", "threecheck"]);
 let activeContext = null;
 let lastTickAt = Date.now();
 
@@ -68,13 +72,13 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === "rules-updated") {
-    refreshActiveContext().then(enforceActiveTab).then(() => sendResponse({ ok: true }));
+  if (message?.type === "chase-status") {
+    getChaseEligibility().then(sendResponse).catch((error) => sendResponse({ eligible: false, reason: error.message }));
     return true;
   }
 
-  if (message?.type === "today-reset") {
-    handleTodayReset().then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: error.message }));
+  if (message?.type === "chase-start") {
+    startChase(_sender.tab?.id).then(sendResponse).catch((error) => sendResponse({ ok: false, reason: error.message }));
     return true;
   }
 
@@ -146,10 +150,127 @@ async function handleDailyReset() {
   await enforceActiveTab();
 }
 
-async function handleTodayReset() {
-  lastTickAt = Date.now();
-  await refreshActiveContext();
-  await restoreBlockedTabs();
+// One "chase a loss" per day: if your most recent Chess.com game today was a
+// loss, you may play exactly one more game. The chase allows Chess.com until a
+// /game/ URL opens, then only that game URL, and expires after CHASE_MAX_MS.
+async function getChaseEligibility() {
+  const state = await getState();
+  const dateKey = getLocalDateKey();
+
+  if (state.chaseByDate?.[dateKey]) {
+    return { eligible: false, reason: "You've already used today's chase." };
+  }
+
+  if (!state.chessUsername) {
+    return { eligible: false, reason: "Set your Chess.com username in the extension popup to enable chasing a loss (takes effect tomorrow)." };
+  }
+
+  const lastGame = await fetchLastGameToday(state.chessUsername);
+
+  if (!lastGame) {
+    return { eligible: false, reason: "No finished game found today yet. Chess.com can take a minute to publish it.", retry: true };
+  }
+
+  if (!lastGame.lost) {
+    return { eligible: false, reason: `Your last game was a ${lastGame.result}. Done for today.`, retry: true };
+  }
+
+  return { eligible: true, reason: `Your last game was a loss (${lastGame.result}). You get one game to chase it, once per day.` };
+}
+
+async function startChase(tabId) {
+  const eligibility = await getChaseEligibility();
+
+  if (!eligibility.eligible) {
+    return { ok: false, reason: eligibility.reason };
+  }
+
+  const state = await getState();
+  await setState({
+    chaseByDate: {
+      ...state.chaseByDate,
+      [getLocalDateKey()]: { startedAt: Date.now(), gameUrl: null }
+    }
+  });
+
+  if (tabId) {
+    await chrome.tabs.update(tabId, { url: CHASE_START_URL });
+  }
+
+  return { ok: true };
+}
+
+async function fetchLastGameToday(username) {
+  const now = new Date();
+  const archiveUrl = `https://api.chess.com/pub/player/${encodeURIComponent(username.toLowerCase())}/games/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const response = await fetch(archiveUrl, { cache: "no-store" });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(`Chess.com API returned ${response.status}.`);
+  }
+
+  const { games = [] } = await response.json();
+  const dateKey = getLocalDateKey(now);
+  const lastGame = games
+    .filter((game) => game.end_time && getLocalDateKey(new Date(game.end_time * 1000)) === dateKey)
+    .sort((a, b) => b.end_time - a.end_time)[0];
+
+  if (!lastGame) {
+    return null;
+  }
+
+  const name = username.toLowerCase();
+  const side = lastGame.white?.username?.toLowerCase() === name ? lastGame.white : lastGame.black;
+  const result = side?.result || "unknown";
+  return { result, lost: LOSS_RESULTS.has(result) };
+}
+
+// Returns true when the active chase lets this URL through. Locks the chase to
+// the first game URL it sees.
+async function chaseAllows(state, url) {
+  const dateKey = getLocalDateKey();
+  const chase = state.chaseByDate?.[dateKey];
+
+  if (!chase || !isChessUrl(url)) {
+    return false;
+  }
+
+  const elapsed = Date.now() - chase.startedAt;
+
+  if (elapsed > CHASE_MAX_MS) {
+    return false;
+  }
+
+  if (!chase.gameUrl) {
+    if (elapsed > CHASE_FIND_GAME_MS) {
+      return false;
+    }
+
+    if (isChessGameUrl(url)) {
+      await setState({
+        chaseByDate: {
+          ...state.chaseByDate,
+          [dateKey]: { ...chase, gameUrl: normalizeGraceUrl(url) }
+        }
+      });
+    }
+
+    return true;
+  }
+
+  return normalizeGraceUrl(url) === chase.gameUrl;
+}
+
+function isChessUrl(url) {
+  try {
+    return /(^|\.)chess\.com$/i.test(new URL(url).hostname);
+  } catch (_error) {
+    return false;
+  }
 }
 
 function maybeMarkWarningNotice(state, rule, previousSeconds, nextSeconds, dateKey) {
@@ -260,13 +381,22 @@ async function clearOldDailyState() {
     ? state.graceUrlsByDate
     : { [today]: state.graceUrlsByDate?.[today] || {} };
 
-  if (warningNoticesByDate === state.warningNoticesByDate && graceUrlsByDate === state.graceUrlsByDate) {
+  const chaseByDate = Object.keys(state.chaseByDate || {}).every((dateKey) => dateKey === today)
+    ? state.chaseByDate
+    : (state.chaseByDate?.[today] ? { [today]: state.chaseByDate[today] } : {});
+
+  if (
+    warningNoticesByDate === state.warningNoticesByDate &&
+    graceUrlsByDate === state.graceUrlsByDate &&
+    chaseByDate === state.chaseByDate
+  ) {
     return;
   }
 
   await setState({
     warningNoticesByDate,
-    graceUrlsByDate
+    graceUrlsByDate,
+    chaseByDate
   });
 }
 
@@ -329,7 +459,7 @@ async function enforceTab(tabId) {
   const state = await applyPendingRulesIfReady();
   const rule = getMatchingRule(tab.url, state.activeRules);
 
-  if (!rule || !isRuleOverLimit(state, rule) || isGraceUrl(state, rule, tab.url)) {
+  if (!rule || !isRuleOverLimit(state, rule) || isGraceUrl(state, rule, tab.url) || await chaseAllows(state, tab.url)) {
     return;
   }
 
@@ -340,24 +470,5 @@ async function enforceTab(tabId) {
   if (tab.url !== blockedUrl) {
     await chrome.tabs.update(tabId, { url: blockedUrl });
   }
-}
-
-async function restoreBlockedTabs() {
-  const tabs = await chrome.tabs.query({});
-  const blockedPrefix = chrome.runtime.getURL("src/blocked.html");
-
-  await Promise.all(tabs.map(async (tab) => {
-    if (!tab.id || !tab.url?.startsWith(blockedPrefix)) {
-      return;
-    }
-
-    const originalUrl = new URL(tab.url).searchParams.get("url");
-
-    if (!originalUrl || !/^https?:\/\//i.test(originalUrl)) {
-      return;
-    }
-
-    await chrome.tabs.update(tab.id, { url: originalUrl });
-  }));
 }
 })();

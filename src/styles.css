@@ -309,3 +309,13 @@ dd {
     text-align: left;
   }
 }
+
+.chase {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0;
+}
+
+#usernameForm input {
+  flex: 1;
+}

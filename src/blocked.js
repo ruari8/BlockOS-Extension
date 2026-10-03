@@ -27,5 +27,32 @@ async function renderBlockedPage() {
     ? `${formatDuration(usage)} of ${formatDuration(Number(rule.minutes) * 60)}`
     : "-";
   document.querySelector("#reset").textContent = getNextResetLabel();
+  await renderChase();
+}
+
+async function renderChase() {
+  const statusEl = document.querySelector("#chaseStatus");
+  const chaseButton = document.querySelector("#chaseButton");
+  const retryButton = document.querySelector("#chaseRetryButton");
+
+  chaseButton.hidden = true;
+  retryButton.hidden = true;
+  statusEl.textContent = "Checking your last game...";
+
+  const status = await chrome.runtime.sendMessage({ type: "chase-status" });
+  statusEl.textContent = status.reason;
+  chaseButton.hidden = !status.eligible;
+  retryButton.hidden = !status.retry;
+
+  chaseButton.onclick = async () => {
+    chaseButton.disabled = true;
+    const result = await chrome.runtime.sendMessage({ type: "chase-start" });
+
+    if (!result.ok) {
+      statusEl.textContent = result.reason;
+      chaseButton.hidden = true;
+    }
+  };
+  retryButton.onclick = renderChase;
 }
 })();

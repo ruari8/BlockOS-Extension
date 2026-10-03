@@ -4,9 +4,6 @@ const shared = self.BlockerShared;
 const {
   getLocalDateKey,
   getNextResetLabel,
-  cloneRules,
-  ensureRuleIds,
-  createRuleId,
   getUsageSeconds,
   formatDuration,
   getState,
@@ -18,14 +15,10 @@ const {
 const todayEl = document.querySelector("#today");
 const statusMessageEl = document.querySelector("#statusMessage");
 const activeRulesEl = document.querySelector("#activeRules");
-const rulesForm = document.querySelector("#rulesForm");
-const addRuleButton = document.querySelector("#addRuleButton");
-const discardButton = document.querySelector("#discardButton");
-const resetUsageButton = document.querySelector("#resetUsageButton");
+const usernameForm = document.querySelector("#usernameForm");
+const usernameInput = document.querySelector("#usernameInput");
+const usernameStatusEl = document.querySelector("#usernameStatus");
 const activeRuleTemplate = document.querySelector("#activeRuleTemplate");
-const editableRuleTemplate = document.querySelector("#editableRuleTemplate");
-
-let draftRules = [];
 
 boot();
 
@@ -35,10 +28,7 @@ function boot() {
     return;
   }
 
-  addRuleButton.addEventListener("click", addDraftRule);
-  discardButton.addEventListener("click", discardPendingRules);
-  resetUsageButton.addEventListener("click", resetTodayUsage);
-  rulesForm.addEventListener("submit", saveDraftRules);
+  usernameForm.addEventListener("submit", saveUsername);
   render().catch((error) => showStatus(error.message, true));
 }
 
@@ -47,11 +37,10 @@ async function render() {
   await initializeState();
   const state = await applyPendingRulesIfReady();
   const dateKey = getLocalDateKey();
-  draftRules = cloneRules(state.pendingRules || state.activeRules);
 
   todayEl.textContent = `Today: ${dateKey} · resets ${getNextResetLabel()}`;
   renderActiveRules(state, dateKey);
-  renderDraftRules();
+  renderUsername(state);
   showStatus("");
 }
 
@@ -75,89 +64,20 @@ function renderActiveRules(state, dateKey) {
   }
 }
 
-function renderDraftRules() {
-  rulesForm.textContent = "";
-
-  for (const rule of draftRules) {
-    const row = editableRuleTemplate.content.firstElementChild.cloneNode(true);
-    row.dataset.ruleId = rule.id;
-    row.querySelector('[name="pattern"]').value = rule.pattern;
-    row.querySelector('[name="minutes"]').value = rule.minutes;
-    row.querySelector('[name="enabled"]').checked = Boolean(rule.enabled);
-    row.querySelector('[data-action="remove"]').addEventListener("click", () => {
-      draftRules = readDraftRules().filter((candidate) => candidate.id !== rule.id);
-      renderDraftRules();
-    });
-    rulesForm.append(row);
-  }
-
-  if (draftRules.length === 0) {
-    rulesForm.append(emptyState("No rules in tomorrow's draft."));
-  }
+function renderUsername(state) {
+  const current = state.chessUsername || "not set";
+  const pending = state.pendingChessUsername !== null ? ` · changing to "${state.pendingChessUsername || "none"}" tomorrow` : "";
+  usernameStatusEl.textContent = `Once a day, if your last game was a loss, you can play one more. Username: ${current}${pending}.`;
+  usernameInput.value = state.pendingChessUsername ?? state.chessUsername;
 }
 
-function addDraftRule() {
-  draftRules = readDraftRules();
-  draftRules.push({
-    id: createRuleId("new-rule"),
-    pattern: "*://*.example.com/*",
-    minutes: 30,
-    enabled: true
-  });
-  renderDraftRules();
-}
-
-async function discardPendingRules() {
-  await setState({
-    pendingRules: null,
-    pendingRulesCreatedDate: null
-  });
-  await notifyBackground();
-  await render();
-}
-
-async function resetTodayUsage() {
-  const state = await getState();
-  const dateKey = getLocalDateKey();
-  const nextUsageByDate = { ...state.usageByDate };
-  const nextWarningNoticesByDate = { ...state.warningNoticesByDate };
-  const nextGraceUrlsByDate = { ...state.graceUrlsByDate };
-  delete nextUsageByDate[dateKey];
-  delete nextWarningNoticesByDate[dateKey];
-  delete nextGraceUrlsByDate[dateKey];
-  await setState({
-    usageByDate: nextUsageByDate,
-    warningNoticesByDate: nextWarningNoticesByDate,
-    graceUrlsByDate: nextGraceUrlsByDate
-  });
-  await notifyBackground("today-reset");
-  await render();
-}
-
-async function saveDraftRules(event) {
+async function saveUsername(event) {
   event.preventDefault();
-  const pendingRules = ensureRuleIds(readDraftRules()).map((rule) => ({
-    id: rule.id,
-    pattern: rule.pattern.trim(),
-    minutes: Number(rule.minutes),
-    enabled: Boolean(rule.enabled)
-  }));
-
   await setState({
-    pendingRules,
-    pendingRulesCreatedDate: getLocalDateKey()
+    pendingChessUsername: usernameInput.value.trim().replace(/^@/, ""),
+    pendingChessUsernameDate: getLocalDateKey()
   });
-  await notifyBackground();
   await render();
-}
-
-function readDraftRules() {
-  return [...rulesForm.querySelectorAll(".editor-row")].map((row) => ({
-    id: row.dataset.ruleId,
-    pattern: row.querySelector('[name="pattern"]').value,
-    minutes: Number(row.querySelector('[name="minutes"]').value),
-    enabled: row.querySelector('[name="enabled"]').checked
-  }));
 }
 
 function emptyState(message) {
@@ -165,14 +85,6 @@ function emptyState(message) {
   element.className = "empty muted";
   element.textContent = message;
   return element;
-}
-
-async function notifyBackground(type = "rules-updated") {
-  try {
-    await chrome.runtime.sendMessage({ type });
-  } catch (_error) {
-    // The options page still works if the background worker is asleep.
-  }
 }
 
 function showStatus(message, isError = false) {

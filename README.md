@@ -9,7 +9,7 @@ I originally built this as a practical answer to my Chess.com habit: enough fric
 - Tracks active-tab time against configurable URL patterns.
 - Ships with a default Chess.com rule: `*://*.chess.com/*` for 30 minutes per local day.
 - Blocks matching tabs once the daily budget is used.
-- Applies rule edits the next day, so limits cannot be changed in the moment.
+- Has no rule editor or reset: limits are fixed in `src/shared.js`.
 - Sends a warning notification with 10 minutes left.
 - Allows the current Chess.com game URL to finish when the budget runs out, then blocks new Chess.com pages.
 - Stores all rules and usage locally with `chrome.storage.local`.
@@ -25,13 +25,11 @@ No build step is required.
 
 ## Using it
 
-Open the extension popup or options page to view today's active rules and edit tomorrow's draft rules. A rule has:
+The popup shows today's usage. The rule (`*://*.chess.com/*`, 30 minutes per local day) lives in `DEFAULT_RULES` in `src/shared.js`; changing it means editing code and reloading the extension. There is no reset button.
 
-- `pattern`: a URL pattern such as `*://*.chess.com/*`
-- `minutes`: the daily active-tab budget
-- `enabled`: whether the rule is active
+### Chase a loss
 
-Saved changes become active at the next local day. The options page also includes **Reset today for testing**, which clears today's usage and restores blocked tabs so short budgets can be tested without waiting until midnight.
+Once per day, if your most recent Chess.com game today was a loss, the blocked page lets you play one more game. The extension checks this against Chess.com's public API using the username saved in the popup. Username changes also only take effect the next day. A chase allows Chess.com for up to 10 minutes while you find a game, then only that one game URL, and it expires after an hour. Starting a new game or rematch blocks you again.
 
 ## Development
 
